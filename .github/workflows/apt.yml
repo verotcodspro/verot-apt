@@ -1,0 +1,90 @@
+name: Build APT Repository
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download VEROT package
+        run: |
+          mkdir -p packages
+          wget -O packages/verot-package.deb \
+            https://github.com/verotcodspro/verot/raw/main/verot-package.deb
+
+      - name: Install reprepro
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y reprepro
+
+      - name: Create repository configuration
+        run: |
+          mkdir -p apt-repo/conf
+
+          cat > apt-repo/conf/distributions <<'EOF'
+          Origin: VEROT
+          Label: VEROT
+          Suite: stable
+          Codename: stable
+          Architectures: amd64
+          Components: main
+          Description: VEROT Programming Language APT Repository
+          EOF
+
+      - name: Add package
+        run: |
+          reprepro -b apt-repo includedeb stable packages/verot-package.deb
+
+      - name: Create index page
+        run: |
+          cat > apt-repo/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>VEROT APT Repository</title>
+          </head>
+          <body>
+            <h1>VEROT APT Repository</h1>
+
+            <p>VEROT Programming Language packages.</p>
+
+            <h2>Install</h2>
+
+            <pre>
+          echo "deb [trusted=yes] https://verotcodspro.github.io/verot-apt stable main" | sudo tee /etc/apt/sources.list.d/verot.list
+          sudo apt update
+          sudo apt install verot
+            </pre>
+          </body>
+          </html>
+          EOF
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: apt-repo
+
+  deploy:
+    environment:
+      name: github-pages
+
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Deploy
+        uses: actions/deploy-pages@v4
